@@ -1,58 +1,137 @@
-# create-svelte
+# tiny-svelte-fsm
 
-Everything you need to build a Svelte library, powered by [`create-svelte`](https://github.com/sveltejs/kit/tree/main/packages/create-svelte).
+A minimalistic finite state machine library for Svelte 5, heavily inspired by [kenkunz/svelte-fsm](https://github.com/kenkunz/svelte-fsm) — but strongly-typed, and powered by Svelte 5 runes.
 
-Read more about creating a library [in the docs](https://kit.svelte.dev/docs/packaging).
+FSMs are ideal for representing many different kinds of systems and interaction patterns. Stately's [xstate](https://github.com/statelyai/xstate) is an incredibly powerful library with more functionality. This is a much smaller and simpler library, and hopefully it's easy to understand.
 
-## Creating a project
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Usage
 
-```bash
-# create a new project in the current directory
-npm create svelte@latest
+### Installation
 
-# create a new project in my-app
-npm create svelte@latest my-app
+> [!WARNING]
+> It's not yet published to npm.
+
+### Introduction
+
+Every state machine is defined as a collection of _states_ and _events_. To define a state machine, create a list of the valid states and events:
+
+```ts
+type myStates = 'on' | 'off';
+type myEvents = 'toggle';
 ```
 
-## Developing
+Next, create the actual state machine:
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```bash
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+```ts
+const f = fsm<myStates, myEvents>('off', {
+	off: {
+		toggle: 'on'
+	},
+	on: {
+		toggle: 'off'
+	}
+});
 ```
 
-Everything inside `src/lib` is part of your library, everything inside `src/routes` can be used as a showcase or preview app.
+The first argument is the initial state. The second argument is an object with one key for each state. Each state then describes which events are valid for that state, and which state that event should lead to.
 
-## Building
+In the above example of a simple switch, there are two states (`on` and `off`). The `toggle` event in either state leads to the other state.
 
-To build your library:
+You send events to the fsm using `f.send`. To send the `toggle` event, invoke `f.send('toggle')`.
 
-```bash
-npm run package
+### Actions
+
+Maybe you want fancier logic for an event handler, or you want to conditionally transition into another state:
+
+```ts
+type myStates = 'on' | 'off' | 'cooldown';
+
+const f = fsm<myStates, myEvents>('off', {
+	off: {
+		toggle: () => {
+			// You can prevent state transitions from happening by returning nothing.
+			if (isTuesday) {
+				// switch can only turn on during Tuesdays
+				return 'on'
+			}
+		}
+	},
+	on: {
+		toggle: (heldMillis: number) => {
+			// You can also dynamically return the next state
+			// only turn off if switch is depressed for 3 seconds
+			// otherwise enter the `cooldown` state
+			return heldMillis > 3000 ? 'off' : 'cooldown'
+		}
+	}
+});
 ```
 
-To create a production version of your showcase app:
+### Lifecycle methods
 
-```bash
-npm run build
+You can define special handlers that are invoked whenever a state is entered or exited:
+
+```ts
+const f = fsm<myStates, myEvents>('off', {
+	off: {
+		toggle: 'on'
+		_enter: () => { console.log('switch is off')}
+		_exit: () => { console.log('switch is no longer off')}
+	},
+	on: {
+		toggle: 'off'
+		_enter: () => { console.log('switch is on')}
+		_exit: () => { console.log('switch is no longer on')}
+	}
+});
 ```
 
-You can preview the production build with `npm run preview`.
+The lifecycle methods are invoked with an argument containing useful metadata:
 
-> To deploy your app, you may need to install an [adapter](https://kit.svelte.dev/docs/adapters) for your target environment.
+- `from`: the name of the event that is being exited
+- `to`: the name of the event that is being entered
+- `event`: the name of the event which has triggered the transition
+- `args`: (optional) you may pass additional metadata when invoking an action with `f.send('theAction', additional, params, as, args)`
 
-## Publishing
+The `_enter` handler for the initial state is called upon creation of the FSM. It is invoked with both the `from` and `event` fields set to `null`.
 
-Go into the `package.json` and give your package the desired name through the `"name"` option. Also consider adding a `"license"` field and point it to a `LICENSE` file which you can create from a template (one popular option is the [MIT license](https://opensource.org/license/mit/)).
+### Wildcard handlers
 
-To publish your library to [npm](https://www.npmjs.com):
+There is one special state used as a fallback: `*`. If you attempt to `send()` an event that is not handled by the current state, it will try to find a handler for that event on the `*` state:
 
-```bash
-npm publish
+```ts
+const f = fsm<myStates, myEvents>('off', {
+	off: {
+		toggle: 'on'
+	},
+	on: {
+		toggle: 'off'
+	}
+	'*': {
+		emergency: 'off'
+	}
+});
+
+// will always result in the switch turning off.
+f.send('emergency');
+```
+
+### Debouncing
+
+Frequently, you want to transition to another state after some time has elapsed. To do this, use the `debounce` method:
+
+```ts
+f.send('toggle'); // turn on immediately
+f.debounce(5000, 'toggle'); // turn off in 5000 milliseconds
+```
+
+If you re-invoke debounce with the same event, it will cancel the existing timer and start the countdown over:
+
+```ts
+// schedule a toggle in five seconds
+f.debounce(5000, 'toggle');
+
+// Cancels the original timer, and starts a fresh one:
+f.debounce(5000, 'toggle'); 
 ```
