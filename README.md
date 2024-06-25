@@ -9,8 +9,7 @@ FSMs are ideal for representing many different kinds of systems and interaction 
 
 ### Installation
 
-> [!WARNING]
-> It's not yet published to npm.
+`pnpm i @githubnext/tiny-svelte-fsm`
 
 ### Introduction
 

@@ -1,6 +1,6 @@
 {
-	"name": "tiny-svelte-fsm",
-	"version": "0.0.1",
+	"name": "@githubnext/tiny-svelte-fsm",
+	"version": "1.0.0",
 	"license": "MIT",
 	"scripts": {
 		"dev": "vite dev",
